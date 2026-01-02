@@ -202,8 +202,8 @@ function App() {
                 )}
               </div>
 
-              {/* Main content - Image preview */}
-              <div className="lg:col-span-2">
+              {/* Main content - Image preview (sticky) */}
+              <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                 <div className="glass-card p-6">
                   <ImagePreview />
                 </div>
