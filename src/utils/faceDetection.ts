@@ -17,6 +17,7 @@ export async function loadModels(): Promise<void> {
     try {
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
       ]);
       modelsLoaded = true;
@@ -33,17 +34,95 @@ export function isModelsLoaded(): boolean {
   return modelsLoaded;
 }
 
+/**
+ * Resize image if too large for better detection
+ */
+function resizeImageIfNeeded(
+  imageElement: HTMLImageElement | HTMLCanvasElement,
+  maxSize: number = 1024
+): HTMLCanvasElement {
+  const width = imageElement instanceof HTMLImageElement ? imageElement.naturalWidth : imageElement.width;
+  const height = imageElement instanceof HTMLImageElement ? imageElement.naturalHeight : imageElement.height;
+
+  // If image is small enough, just draw it to a canvas
+  if (width <= maxSize && height <= maxSize) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(imageElement, 0, 0);
+    return canvas;
+  }
+
+  // Calculate new dimensions maintaining aspect ratio
+  const scale = maxSize / Math.max(width, height);
+  const newWidth = Math.round(width * scale);
+  const newHeight = Math.round(height * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = newWidth;
+  canvas.height = newHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(imageElement, 0, 0, newWidth, newHeight);
+
+  return canvas;
+}
+
+/**
+ * Scale landmarks back to original image size
+ */
+function scaleLandmarks(landmarks: FaceLandmarks, scale: number): FaceLandmarks {
+  const scalePoints = (points: Point[]): Point[] =>
+    points.map(p => ({ x: p.x / scale, y: p.y / scale }));
+
+  return {
+    nose: scalePoints(landmarks.nose),
+    leftEye: scalePoints(landmarks.leftEye),
+    rightEye: scalePoints(landmarks.rightEye),
+    jawline: scalePoints(landmarks.jawline),
+    leftEyebrow: scalePoints(landmarks.leftEyebrow),
+    rightEyebrow: scalePoints(landmarks.rightEyebrow),
+    mouth: scalePoints(landmarks.mouth),
+  };
+}
+
 export async function detectFace(imageElement: HTMLImageElement | HTMLCanvasElement): Promise<FaceDetectionResult | null> {
   if (!modelsLoaded) {
     await loadModels();
   }
 
-  const detection = await faceapi
-    .detectSingleFace(imageElement, new faceapi.TinyFaceDetectorOptions({
-      inputSize: 512,
-      scoreThreshold: 0.5,
+  const originalWidth = imageElement instanceof HTMLImageElement ? imageElement.naturalWidth : imageElement.width;
+
+  // Resize for better detection
+  const resizedCanvas = resizeImageIfNeeded(imageElement, 800);
+  const scale = resizedCanvas.width / originalWidth;
+
+  // Try TinyFaceDetector first with lower threshold
+  let detection = await faceapi
+    .detectSingleFace(resizedCanvas, new faceapi.TinyFaceDetectorOptions({
+      inputSize: 416,
+      scoreThreshold: 0.3,
     }))
     .withFaceLandmarks();
+
+  // If TinyFaceDetector fails, try with different input size
+  if (!detection) {
+    detection = await faceapi
+      .detectSingleFace(resizedCanvas, new faceapi.TinyFaceDetectorOptions({
+        inputSize: 608,
+        scoreThreshold: 0.2,
+      }))
+      .withFaceLandmarks();
+  }
+
+  // If still no detection, try SSD MobileNet (slower but more accurate)
+  if (!detection) {
+    detection = await faceapi
+      .detectSingleFace(resizedCanvas, new faceapi.SsdMobilenetv1Options({
+        minConfidence: 0.2,
+      }))
+      .withFaceLandmarks();
+  }
 
   if (!detection) {
     return null;
@@ -71,7 +150,7 @@ export async function detectFace(imageElement: HTMLImageElement | HTMLCanvasElem
     return points;
   };
 
-  const faceLandmarks: FaceLandmarks = {
+  let faceLandmarks: FaceLandmarks = {
     nose: extractPoints(27, 35),
     leftEye: extractPoints(36, 41),
     rightEye: extractPoints(42, 47),
@@ -81,15 +160,20 @@ export async function detectFace(imageElement: HTMLImageElement | HTMLCanvasElem
     mouth: extractPoints(48, 67),
   };
 
+  // Scale landmarks back to original image size if we resized
+  if (scale !== 1) {
+    faceLandmarks = scaleLandmarks(faceLandmarks, scale);
+  }
+
   const box = detection.detection.box;
 
   return {
     landmarks: faceLandmarks,
     boundingBox: {
-      x: box.x,
-      y: box.y,
-      width: box.width,
-      height: box.height,
+      x: box.x / scale,
+      y: box.y / scale,
+      width: box.width / scale,
+      height: box.height / scale,
     },
     confidence: detection.detection.score,
   };

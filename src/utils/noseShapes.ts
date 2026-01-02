@@ -64,7 +64,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Straight Profile',
     description: 'Clean, straight bridge with refined tip',
     category: 'refined',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '📐',
     parameters: {
       bridgeWidth: -0.25,
@@ -82,7 +82,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Upturned Tip',
     description: 'Slight upturn for a youthful appearance',
     category: 'refined',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '🌟',
     parameters: {
       bridgeWidth: -0.15,
@@ -100,7 +100,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Slim Profile',
     description: 'Narrower bridge and refined nostrils',
     category: 'refined',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '〰️',
     parameters: {
       bridgeWidth: -0.35,
@@ -120,7 +120,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Sculpted',
     description: 'Dramatically defined features',
     category: 'dramatic',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '🎭',
     parameters: {
       bridgeWidth: -0.4,
@@ -138,7 +138,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Button Nose',
     description: 'Small, cute button-shaped nose',
     category: 'dramatic',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '🔘',
     parameters: {
       bridgeWidth: -0.3,
@@ -156,7 +156,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Grecian',
     description: 'Straight, prominent bridge inspired by classical art',
     category: 'dramatic',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '🏛️',
     parameters: {
       bridgeWidth: -0.1,
@@ -174,7 +174,7 @@ export const noseShapes: NoseShape[] = [
     name: 'Celestial',
     description: 'Delicate with a pronounced upturn',
     category: 'dramatic',
-    isPremium: true,
+    isPremium: false,
     thumbnail: '⭐',
     parameters: {
       bridgeWidth: -0.25,
