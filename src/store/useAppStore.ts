@@ -90,12 +90,16 @@ export const useAppStore = create<AppState & AppActions>()(
     (set) => ({
       ...initialState,
 
-      setOriginalImage: (image) => set({
+      setOriginalImage: (image) => set((state) => ({
         originalImage: image,
         processedImage: null,
-        faceDetection: null,
-        detectionError: null,
-      }),
+        // Only reset detection if clearing the image
+        faceDetection: image ? state.faceDetection : null,
+        detectionError: image ? state.detectionError : null,
+        selectedNoseShape: image ? state.selectedNoseShape : null,
+        customParameters: image ? state.customParameters : defaultParameters,
+        showComparison: false,
+      })),
 
       setProcessedImage: (image) => set({ processedImage: image }),
 

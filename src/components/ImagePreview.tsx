@@ -193,15 +193,55 @@ export function ImagePreview() {
         </div>
       </div>
 
-      {/* Error display */}
+      {/* Error/Warning display */}
       {detectionError && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+          className={`p-4 rounded-xl border ${
+            faceDetection
+              ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+              : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+          }`}
         >
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <p className="text-sm text-red-700 dark:text-red-300">{detectionError}</p>
+          <div className="flex items-start gap-3">
+            <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+              faceDetection ? 'text-amber-500' : 'text-red-500'
+            }`} />
+            <div className="flex-1">
+              <p className={`text-sm font-medium ${
+                faceDetection
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-red-700 dark:text-red-300'
+              }`}>
+                {detectionError}
+              </p>
+              {!faceDetection && (
+                <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                  <p className="font-medium">Tips for better results:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    <li>Use a clear, front-facing photo</li>
+                    <li>Ensure good lighting on your face</li>
+                    <li>Avoid tilting your head too much</li>
+                    <li>Make sure your full face is visible</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* No detection guidance */}
+      {!faceDetection && !detectionError && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+        >
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Processing your image... If face detection fails, try uploading a clearer front-facing photo.
+          </p>
         </motion.div>
       )}
 

@@ -18,6 +18,7 @@ export function ImageUpload() {
     setIsLoading(true);
     setLoadingMessage('Loading AI models...');
     setIsProcessing(true);
+    setDetectionError(null);
 
     try {
       // Load models first
@@ -35,25 +36,7 @@ export function ImageUpload() {
         img.src = URL.createObjectURL(file);
       });
 
-      setLoadingMessage('Detecting face...');
-
-      // Detect face
-      const detection = await detectFace(img);
-
-      if (!detection) {
-        setDetectionError('No face detected. Please use a clear photo with a visible face.');
-        setIsLoading(false);
-        setIsProcessing(false);
-        return;
-      }
-
-      if (detection.confidence < 0.7) {
-        setDetectionError('Face detection confidence is low. Try using a clearer photo.');
-      } else {
-        setDetectionError(null);
-      }
-
-      // Convert to base64 for storage
+      // Convert to base64 for storage first (so image is always shown)
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
@@ -61,8 +44,24 @@ export function ImageUpload() {
       ctx.drawImage(img, 0, 0);
       const base64 = canvas.toDataURL('image/jpeg', 0.9);
 
+      // Store the image immediately so it shows up
       setOriginalImage(base64);
-      setFaceDetection(detection);
+
+      setLoadingMessage('Detecting face...');
+
+      // Detect face
+      const detection = await detectFace(img);
+
+      if (!detection) {
+        setDetectionError('No face detected. Please use a clear front-facing photo with good lighting.');
+        setFaceDetection(null);
+      } else if (detection.confidence < 0.7) {
+        setDetectionError('Face detection confidence is low. The results may be less accurate.');
+        setFaceDetection(detection);
+      } else {
+        setDetectionError(null);
+        setFaceDetection(detection);
+      }
     } catch (error) {
       console.error('Error processing image:', error);
       setDetectionError(error instanceof Error ? error.message : 'Failed to process image');
