@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowLeftRight,
@@ -9,10 +9,13 @@ import {
   ZoomIn,
   ZoomOut,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Wand2
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { getMorphingEngine } from '../utils/noseMorphing';
+import { analyzeAndRecommendNose } from '../utils/noseRecommendation';
 
 export function ImagePreview() {
   const {
@@ -31,16 +34,42 @@ export function ImagePreview() {
     setComparisonMode,
     transformationsToday,
     setOriginalImage,
+    setCustomParameters,
   } = useAppStore();
 
   const [sliderPosition, setSliderPosition] = useState(50);
   const [zoom, setZoom] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [recommendation, setRecommendation] = useState<{
+    shape: string;
+    reason: string;
+    confidence: number;
+  } | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
   const canTransform = subscription.features.maxTransformationsPerDay > transformationsToday;
   const addWatermark = !subscription.features.watermarkFree;
+
+  // Analyze face and recommend nose when detection is available
+  useEffect(() => {
+    if (faceDetection && !recommendation) {
+      setIsAnalyzing(true);
+      // Small delay to show analyzing state
+      const timer = setTimeout(() => {
+        const result = analyzeAndRecommendNose(faceDetection);
+        setRecommendation(result);
+        setIsAnalyzing(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [faceDetection, recommendation]);
+
+  // Reset recommendation when image changes
+  useEffect(() => {
+    setRecommendation(null);
+  }, [originalImage]);
 
   // Generate transformed image when parameters change
   const generateTransformation = useCallback(async () => {
@@ -78,7 +107,7 @@ export function ImagePreview() {
     }
   }, [originalImage, faceDetection, customParameters, addWatermark, isProcessing, setProcessedImage, setShowComparison, setIsProcessing]);
 
-  // Handle slider drag
+  // Handle slider drag - prevent text selection
   const handleSliderMove = useCallback((clientX: number) => {
     if (!containerRef.current || !isDragging.current) return;
 
@@ -88,21 +117,49 @@ export function ImagePreview() {
     setSliderPosition(percentage);
   }, []);
 
-  const handleMouseDown = () => {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent text selection
     isDragging.current = true;
-  };
+    // Also update position immediately on click
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      setSliderPosition(percentage);
+    }
+  }, []);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     isDragging.current = false;
-  };
+  }, []);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isDragging.current) {
+      e.preventDefault(); // Prevent text selection during drag
+    }
     handleSliderMove(e.clientX);
-  };
+  }, [handleSliderMove]);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    handleSliderMove(e.touches[0].clientX);
-  };
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    isDragging.current = true;
+    // Update position immediately on touch
+    if (containerRef.current && e.touches[0]) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.touches[0].clientX - rect.left;
+      const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      setSliderPosition(percentage);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches[0]) {
+      handleSliderMove(e.touches[0].clientX);
+    }
+  }, [handleSliderMove]);
+
+  const handleTouchEnd = useCallback(() => {
+    isDragging.current = false;
+  }, []);
 
   // Download result
   const handleDownload = () => {
@@ -114,12 +171,72 @@ export function ImagePreview() {
     link.click();
   };
 
+  // Apply AI recommendation
+  const applyRecommendation = useCallback(() => {
+    if (!recommendation || !faceDetection) return;
+
+    const result = analyzeAndRecommendNose(faceDetection);
+    if (result.parameters) {
+      setCustomParameters(result.parameters);
+    }
+  }, [recommendation, faceDetection, setCustomParameters]);
+
   if (!originalImage) {
     return null;
   }
 
   return (
     <div className="space-y-4">
+      {/* AI Recommendation Banner */}
+      {faceDetection && (isAnalyzing || recommendation) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 rounded-xl bg-gradient-to-r from-primary-50 to-accent-50 dark:from-primary-900/20 dark:to-accent-900/20 border border-primary-200 dark:border-primary-800"
+        >
+          <div className="flex items-center gap-3">
+            {isAnalyzing ? (
+              <>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-accent-500 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800 dark:text-gray-200">
+                    Analyzing your facial features...
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Our AI is finding the perfect nose shape for you
+                  </p>
+                </div>
+              </>
+            ) : recommendation && (
+              <>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-accent-500 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800 dark:text-gray-200">
+                    AI Recommendation: <span className="text-primary-600 dark:text-primary-400">{recommendation.shape}</span>
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {recommendation.reason}
+                  </p>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={applyRecommendation}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-primary-500 to-accent-500 text-white font-medium text-sm shadow-lg shadow-primary-500/25"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  Apply
+                </motion.button>
+              </>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       {/* Controls */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
@@ -248,15 +365,19 @@ export function ImagePreview() {
       {/* Image container */}
       <div
         ref={containerRef}
-        className="relative glass-card overflow-hidden rounded-2xl"
-        style={{ aspectRatio: '4/3' }}
+        className="relative glass-card overflow-hidden rounded-2xl select-none"
+        style={{
+          aspectRatio: '4/3',
+          cursor: processedImage && showComparison && comparisonMode === 'slider' ? 'ew-resize' : 'default',
+          touchAction: 'none' // Prevent scroll while dragging
+        }}
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onTouchMove={handleTouchMove}
-        onTouchStart={handleMouseDown}
-        onTouchEnd={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         <div
           className="absolute inset-0 flex items-center justify-center overflow-hidden"
@@ -266,7 +387,8 @@ export function ImagePreview() {
           <img
             src={originalImage}
             alt="Original"
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain pointer-events-none"
+            draggable={false}
           />
 
           {/* Processed image with comparison */}
@@ -280,7 +402,8 @@ export function ImagePreview() {
                   <img
                     src={processedImage}
                     alt="Transformed"
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain pointer-events-none"
+                    draggable={false}
                   />
                 </div>
               )}
@@ -291,7 +414,8 @@ export function ImagePreview() {
                   animate={{ opacity: 1 }}
                   src={processedImage}
                   alt="Transformed"
-                  className="absolute inset-0 w-full h-full object-contain"
+                  className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                  draggable={false}
                 />
               )}
             </>
@@ -300,7 +424,7 @@ export function ImagePreview() {
           {/* Slider handle */}
           {processedImage && showComparison && comparisonMode === 'slider' && (
             <div
-              className="absolute top-0 bottom-0 w-1 bg-white shadow-lg cursor-ew-resize z-10"
+              className="absolute top-0 bottom-0 w-1 bg-white shadow-lg z-10 pointer-events-none"
               style={{ left: `${sliderPosition}%` }}
             >
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center">
@@ -313,10 +437,10 @@ export function ImagePreview() {
         {/* Labels */}
         {processedImage && showComparison && comparisonMode === 'slider' && (
           <>
-            <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-sm font-medium">
+            <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-sm font-medium pointer-events-none">
               Before
             </div>
-            <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-sm font-medium">
+            <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-sm font-medium pointer-events-none">
               After
             </div>
           </>
@@ -340,19 +464,19 @@ export function ImagePreview() {
             <div className="p-2 bg-gray-100 dark:bg-gray-800 text-center text-sm font-medium text-gray-600 dark:text-gray-400">
               Before
             </div>
-            <img src={originalImage} alt="Original" className="w-full" />
+            <img src={originalImage} alt="Original" className="w-full" draggable={false} />
           </div>
           <div className="glass-card overflow-hidden rounded-xl">
             <div className="p-2 bg-primary-100 dark:bg-primary-900/30 text-center text-sm font-medium text-primary-600 dark:text-primary-400">
               After
             </div>
-            <img src={processedImage} alt="Transformed" className="w-full" />
+            <img src={processedImage} alt="Transformed" className="w-full" draggable={false} />
           </div>
         </div>
       )}
 
       {/* Action buttons */}
-      <div className="flex items-center justify-center gap-3">
+      <div className="flex items-center justify-center gap-3 flex-wrap">
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
